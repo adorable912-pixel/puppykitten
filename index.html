@@ -127,10 +127,10 @@ main{margin-top:14px;display:flex;flex-direction:column;gap:26px}
 .todaybox b{font-family:var(--font-display);font-weight:400;font-size:24px}
 
 /* 가계부 */
-.sumcards{display:grid;gap:16px;grid-template-columns:repeat(auto-fit,minmax(min(100%,200px),1fr))}
+.sumcards{display:grid;gap:14px;grid-template-columns:repeat(auto-fit,minmax(min(100%,175px),1fr))}
 .sum{padding:14px 16px 12px}
 .sum .k{font-size:16px;color:var(--ink-soft)}
-.sum .v{font-family:var(--font-display);font-size:26px;line-height:1.2;word-break:keep-all}
+.sum .v{font-family:var(--font-display);font-size:24px;line-height:1.2;word-break:keep-all}
 .sum.income{background:#f3f8fe}.sum.expense{background:#fff4f8}.sum.left{background:#f2fbf5}.sum.goal{background:#fffbea}
 .sum .v.neg{color:var(--danger)}
 .monthbar{display:flex;align-items:center;gap:8px}
@@ -676,6 +676,7 @@ function viewBudget(){
   const sumOf=(arr,t)=>arr.filter(e=>e.type===t).reduce((a,e)=>a+(+e.amount||0),0);
   const inc=sumOf(f,'income'),exp=sumOf(f,'expense');
   const expAll=sumOf(all,'expense');
+  const expNoWed=sumOf(f.filter(e=>e.main!=='결혼준비'),'expense');
   const target=targetFor(m);
   const left=target-expAll;
   const fl=S.filter==='all'?'':` · ${CH[S.filter].name}`;
@@ -704,6 +705,7 @@ function viewBudget(){
   <div class="sumcards">
     <div class="card sum income"><div class="k">이번 달 총수입${fl}</div><div class="v">${won(inc)}</div></div>
     <div class="card sum expense"><div class="k">이번 달 총지출${fl}</div><div class="v">${won(exp)}</div></div>
+    <div class="card sum expense"><div class="k">결혼준비 제외 지출${fl}</div><div class="v">${won(expNoWed)}</div></div>
     <div class="card sum left"><div class="k">남은 예산 (둘이 함께)</div><div class="v ${left<0?'neg':''}">${target?won(left):'목표를 정해요'}</div></div>
     <div class="card sum goal"><div class="k row spread" style="gap:4px"><span>이번 달 목표 예산</span>${canAdd()?`<button class="iconbtn" type="button" data-a="edit-budget" style="padding:0 8px">수정</button>`:''}</div><div class="v">${target?won(target):'미설정'}</div></div>
   </div>
