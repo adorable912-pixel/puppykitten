@@ -243,6 +243,7 @@ main{margin-top:14px;display:flex;flex-direction:column;gap:26px}
 .err{color:var(--danger);font-size:17px;min-height:22px}
 .actions{display:flex;gap:10px;justify-content:flex-end;margin-top:8px;flex-wrap:wrap}
 .catman h4{margin:14px 0 6px;font-family:var(--font-display);font-weight:400;font-size:20px;display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+.catblock{background:var(--pink-100);border-radius:22px;padding:12px 14px;margin-top:12px}
 .chips{display:flex;gap:6px;flex-wrap:wrap}
 .chip{display:inline-flex;align-items:center;gap:2px;background:var(--pink-100);border-radius:999px;padding:0 4px 0 12px;font-size:17px}
 .chip button{border:0;background:none;cursor:pointer;color:var(--ink-soft);padding:0 5px;font-size:15px}
@@ -496,7 +497,9 @@ function normCats(d){
   const out={expense:{},income:{}};
   for(const k of ['expense','income']){
     const src=d&&d[k]&&typeof d[k]==='object'?d[k]:DEFAULT_CATS[k];
-    for(const m of Object.keys(src)){out[k][m]=Array.isArray(src[m])?src[m].map(String):[]}
+    const keys=Object.keys(src);const ord=d&&d.order&&Array.isArray(d.order[k])?d.order[k]:null;
+    if(ord)keys.sort((a,b)=>{const ia=ord.indexOf(a),ib=ord.indexOf(b);return (ia<0?999:ia)-(ib<0?999:ib)});
+    for(const m of keys){out[k][m]=Array.isArray(src[m])?src[m].map(String):[]}
   }
   return out;
 }
@@ -669,6 +672,7 @@ function targetFor(m){
   const ks=Object.keys(S.budgets).filter(k=>k<m).sort();
   return ks.length?S.budgets[ks[ks.length-1]]:0;
 }
+const isBudgetExcluded=e=>e.main==='결혼준비'||e.sub==='대출금';
 function viewBudget(){
   const m=S.month;
   const all=S.ledger.filter(e=>(e.date||'').slice(0,7)===m);
@@ -676,13 +680,14 @@ function viewBudget(){
   const sumOf=(arr,t)=>arr.filter(e=>e.type===t).reduce((a,e)=>a+(+e.amount||0),0);
   const inc=sumOf(f,'income'),exp=sumOf(f,'expense');
   const expAll=sumOf(all,'expense');
-  const expNoWed=sumOf(f.filter(e=>e.main!=='결혼준비'),'expense');
+  const expCore=sumOf(f.filter(e=>!isBudgetExcluded(e)),'expense');
+  const budgetUsed=sumOf(all.filter(e=>!isBudgetExcluded(e)),'expense');
   const target=targetFor(m);
-  const left=target-expAll;
+  const left=target-budgetUsed;
   const fl=S.filter==='all'?'':` · ${CH[S.filter].name}`;
   const seg=(k,l,img)=>`<button type="button" class="${S.filter===k?'on':''} ${k==='gangjwi'?'g':''}" data-a="filter" data-v="${k}">${img?`<img src="${SPR[img].uri}" alt="">`:''}${l}</button>`;
   let body;
-  if(S.tab==='stats') body=budgetStats(all,target,expAll);
+  if(S.tab==='stats') body=budgetStats(all,target,budgetUsed);
   else{
     const list=[...f].sort(byDate);
     body=`<section class="card titled"><div class="tag">${paw(16)} 수입 · 지출 내역${fl}</div>
@@ -705,7 +710,7 @@ function viewBudget(){
   <div class="sumcards">
     <div class="card sum income"><div class="k">이번 달 총수입${fl}</div><div class="v">${won(inc)}</div></div>
     <div class="card sum expense"><div class="k">이번 달 총지출${fl}</div><div class="v">${won(exp)}</div></div>
-    <div class="card sum expense"><div class="k">결혼준비 제외 지출${fl}</div><div class="v">${won(expNoWed)}</div></div>
+    <div class="card sum expense"><div class="k">예산 대상 지출${fl}</div><div class="v">${won(expCore)}</div><div class="k" style="font-size:14px">결혼준비 · 대출금 제외</div></div>
     <div class="card sum left"><div class="k">남은 예산 (둘이 함께)</div><div class="v ${left<0?'neg':''}">${target?won(left):'목표를 정해요'}</div></div>
     <div class="card sum goal"><div class="k row spread" style="gap:4px"><span>이번 달 목표 예산</span>${canAdd()?`<button class="iconbtn" type="button" data-a="edit-budget" style="padding:0 8px">수정</button>`:''}</div><div class="v">${target?won(target):'미설정'}</div></div>
   </div>
@@ -728,7 +733,7 @@ function budgetStats(all,target,expAll){
   const over=target&&expAll>target;
   const mood=!target?['g_stand','목표 예산을 정하면 얼마나 썼는지 보여줄게요']:pct<70?['g_happy','잘 아끼고 있어요! 이대로만 가요']:pct<=100?['g_shy','조금만 더 아껴볼까요?']:['g_stand','목표를 넘었어요. 다음 달엔 같이 줄여봐요'];
   return `
-  <section class="card titled"><div class="tag">${heart('#f58aa9',16)} 목표 예산 대비 사용 금액</div>
+  <section class="card titled"><div class="tag">${heart('#f58aa9',16)} 목표 예산 대비 사용 금액</div><div class="muted" style="font-size:16px;margin-bottom:6px">결혼준비와 대출금은 빼고 계산해요</div>
     <div class="mascot">${sp(mood[0])}<div style="flex:1;min-width:0">
       <div class="row spread"><span class="amt">${won(expAll)}</span><span class="muted">/ ${target?won(target):'목표 없음'}</span></div>
       <div class="bar ${over?'over':''}" style="margin:6px 0"><i style="width:${Math.min(100,pct)}%"></i></div>
@@ -801,16 +806,17 @@ function openBudgetForm(){
     });
 }
 /* 카테고리 관리 */
-async function saveCats(){await put('settings','categories',{expense:S.cats.expense,income:S.cats.income})}
+async function saveCats(){await put('settings','categories',{expense:S.cats.expense,income:S.cats.income,order:{expense:Object.keys(S.cats.expense),income:Object.keys(S.cats.income)}})}
 function openCatManager(){
   const kind=S.catKind;const map=S.cats[kind];
-  const body=Object.keys(map).map(mn=>`<h4>${esc(mn)} <button class="iconbtn" data-c="rn-main" data-m="${esc(mn)}" type="button">이름 수정</button><button class="iconbtn" data-c="rm-main" data-m="${esc(mn)}" type="button">삭제</button></h4>
-    <div class="chips">${map[mn].map(s=>`<span class="chip">${esc(s)}<button type="button" data-c="rn-sub" data-m="${esc(mn)}" data-s="${esc(s)}" aria-label="${esc(s)} 이름 수정">수정</button><button type="button" data-c="rm-sub" data-m="${esc(mn)}" data-s="${esc(s)}" aria-label="${esc(s)} 삭제">×</button></span>`).join('')}<button class="btn sm" type="button" data-c="add-sub" data-m="${esc(mn)}">+ 소분류</button></div>`).join('');
+  const body=Object.keys(map).map(mn=>`<div class="catblock"><div class="row spread"><b style="font-family:var(--font-display);font-weight:400;font-size:21px">${esc(mn)}</b><div class="row" style="gap:6px"><button class="btn sm" type="button" data-c="up-main" data-m="${esc(mn)}" aria-label="위로">▲</button><button class="btn sm" type="button" data-c="down-main" data-m="${esc(mn)}" aria-label="아래로">▼</button><button class="btn sm blue" type="button" data-c="rn-main" data-m="${esc(mn)}">대분류 이름 수정</button><button class="btn sm danger" type="button" data-c="rm-main" data-m="${esc(mn)}">삭제</button></div></div>
+    <div class="chips" style="margin-top:8px">${map[mn].map(s=>`<span class="chip">${esc(s)}<button type="button" data-c="rn-sub" data-m="${esc(mn)}" data-s="${esc(s)}" aria-label="${esc(s)} 이름 수정">수정</button><button type="button" data-c="mv-sub" data-m="${esc(mn)}" data-s="${esc(s)}" aria-label="${esc(s)} 다른 대분류로 이동">이동</button><button type="button" data-c="rm-sub" data-m="${esc(mn)}" data-s="${esc(s)}" aria-label="${esc(s)} 삭제">×</button></span>`).join('')}<button class="btn sm" type="button" data-c="add-sub" data-m="${esc(mn)}">+ 소분류 추가</button></div></div>`).join('');
   openModal(`<h3>${sp('k_happy')}카테고리 관리</h3>
     <div class="seg"><button type="button" class="${kind==='expense'?'on':''}" data-c="kind" data-k="expense">지출</button><button type="button" class="g ${kind==='income'?'on':''}" data-c="kind" data-k="income">수입</button></div>
-    <div class="catman">${body||'<p class="muted">대분류가 없어요.</p>'}</div>
-    <div class="muted" style="font-size:16px;margin-top:10px">이름을 고치면 기존 기록도 함께 바뀌고, 삭제해도 기존 기록은 그대로 남아요.</div>
-    <div class="actions"><button class="btn blue" type="button" data-c="add-main">+ 대분류 추가</button><button class="btn primary" type="button" data-c="done">닫기</button></div>`,m=>{
+    <div style="margin-top:10px"><button class="btn primary" type="button" data-c="add-main">+ 대분류 신설</button></div>
+    <div class="catman">${body||'<p class="muted">대분류가 없어요. 위 버튼으로 만들어 보세요.</p>'}</div>
+    <div class="muted" style="font-size:16px;margin-top:10px">대분류는 ▲▼로 순서를 바꾸고, 소분류는 ‘이동’으로 다른 대분류에 옮길 수 있어요. 이름을 고치거나 옮기면 기존 기록의 분류도 함께 바뀌고, 삭제해도 기존 기록은 그대로 남아요.</div>
+    <div class="actions"><button class="btn primary" type="button" data-c="done">닫기</button></div>`,m=>{
     m.onclick=null;
     m.querySelector('.sheet').onclick=async ev=>{
       const b=ev.target.closest('[data-c]');if(!b)return;const c=b.dataset.c;const mn=b.dataset.m,s=b.dataset.s;
@@ -822,8 +828,29 @@ function openCatManager(){
         else if(c==='add-sub')askText(mn+' · 소분류 추가','새 소분류 이름','',async v=>{if(v&&!map[mn].includes(v)){map[mn].push(v);await saveCats()}again()});
         else if(c==='rn-main')askText('대분류 이름 수정','새 이름',mn,async v=>{if(v&&v!==mn&&!map[v]){const n={};for(const k of Object.keys(map))n[k===mn?v:k]=map[k===mn?mn:k];S.cats[kind]=n;await saveCats();for(const e of S.ledger.filter(e=>e.type===kind&&e.main===mn))await upd('ledger',e.id,{main:v})}again()});
         else if(c==='rn-sub')askText('소분류 이름 수정','새 이름',s,async v=>{if(v&&v!==s&&!map[mn].includes(v)){map[mn]=map[mn].map(x=>x===s?v:x);await saveCats();for(const e of S.ledger.filter(e=>e.type===kind&&e.main===mn&&e.sub===s))await upd('ledger',e.id,{sub:v})}again()});
-        else if(c==='rm-main'){delete map[mn];await saveCats();again()}
+        else if(c==='rm-main'){openModal(`<h3>대분류 삭제</h3><p style="margin:0 0 6px">‘${esc(mn)}’와 그 안의 소분류를 목록에서 지울까요? 이미 쓴 기록은 그대로 남아요.</p><div class="err" id="cerr"></div><div class="actions"><button class="btn ghost" type="button" id="cx">아니요</button><button class="btn danger" type="button" id="cok">삭제</button></div>`,mm=>{mm.querySelector('#cx').onclick=again;mm.querySelector('#cok').onclick=async()=>{try{delete map[mn];await saveCats();again()}catch(e){mm.querySelector('#cerr').textContent='저장하지 못했어요.'}}})}
         else if(c==='rm-sub'){map[mn]=map[mn].filter(x=>x!==s);await saveCats();again()}
+        else if(c==='up-main'||c==='down-main'){
+          const keys=Object.keys(map);const i=keys.indexOf(mn);const j=c==='up-main'?i-1:i+1;
+          if(j>=0&&j<keys.length){[keys[i],keys[j]]=[keys[j],keys[i]];const n={};keys.forEach(k=>{n[k]=map[k]});S.cats[kind]=n;await saveCats()}
+          again();
+        }
+        else if(c==='mv-sub'){
+          const targets=Object.keys(map).filter(k=>k!==mn);
+          if(!targets.length){toast('옮길 다른 대분류가 없어요');return}
+          openModal(`<h3>소분류 이동</h3><p style="margin:0 0 8px">‘${esc(s)}’를 어느 대분류로 옮길까요?</p><div class="field"><label for="mv-t">옮길 대분류</label><select id="mv-t">${targets.map(k=>`<option>${esc(k)}</option>`).join('')}</select></div><div class="muted" style="font-size:16px;margin-top:6px">이미 쓴 기록의 분류도 함께 바뀌어요.</div><div class="err" id="cerr"></div><div class="actions"><button class="btn ghost" type="button" id="cx">취소</button><button class="btn primary" type="button" id="cok">이동</button></div>`,mm=>{
+            mm.querySelector('#cx').onclick=again;
+            mm.querySelector('#cok').onclick=async()=>{
+              const to=mm.querySelector('#mv-t').value;
+              if(map[to].includes(s)){mm.querySelector('#cerr').textContent='그 대분류에 같은 이름의 소분류가 이미 있어요.';return}
+              try{
+                map[mn]=map[mn].filter(x=>x!==s);map[to].push(s);await saveCats();
+                for(const e of S.ledger.filter(e=>e.type===kind&&e.main===mn&&e.sub===s))await upd('ledger',e.id,{main:to});
+                again();
+              }catch(err){mm.querySelector('#cerr').textContent='저장하지 못했어요.'}
+            };
+          });
+        }
       }catch(e){toast('저장하지 못했어요')}
     };
   });
