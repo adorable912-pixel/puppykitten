@@ -298,6 +298,8 @@ footer.foot .sp{width:200px}
 /* 댓글 */
 .cmt-prev{display:flex;gap:8px;align-items:flex-start;font-size:16px;color:var(--ink-soft);background:#fff;border-radius:14px;padding:5px 10px}
 .cmt-prev span.t{display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;overflow-wrap:anywhere;min-width:0}
+.cmtcount{display:inline-flex;align-items:center;gap:4px;font-size:16px;background:var(--blue-100);color:var(--blue-ink);border-radius:999px;padding:0 10px;font-family:var(--font-display)}
+.cmtcount svg{width:15px;height:15px}
 .cmts{display:flex;flex-direction:column;max-height:46vh;overflow-y:auto}
 .cmt{display:flex;flex-direction:column;gap:3px;padding:8px 0;border-bottom:2px dotted var(--pink-200)}
 .cmt:last-child{border-bottom:0}
@@ -398,7 +400,7 @@ const DEFAULT_CATS={
 const DEFAULT_GOALS={gangjwi:{start:72.7,goal:76,muscleStart:36.4,muscleGoal:38},kkonyang:{start:51.3,goal:48}};
 const PALETTE=['#f58aa9','#79aee3','#ffc46b','#7fcfa0','#b79af0','#ff9e7a','#6fcfd0','#e59ad0'];
 const S={
-  db:null,me:null,route:'home',ledger:[],recipes:[],moments:[],hg:[],hk:[],hc:[],budgets:{},
+  db:null,me:null,route:'home',ledger:[],recipes:[],moments:[],hg:[],hk:[],hc:[],ic:[],budgets:{},
   cats:JSON.parse(JSON.stringify(DEFAULT_CATS)),goals:JSON.parse(JSON.stringify(DEFAULT_GOALS)),
   month:todayStr().slice(0,7),filter:'all',tab:'list',cuisine:'all',readOnly:false,
   pickWho:null,pin:'',tries:0,lockUntil:0,subscribed:false,hmore:false,catKind:'expense'
@@ -552,7 +554,7 @@ function subscribe(){
   if(S.subscribed||!S.db)return;S.subscribed=true;
   const db=S.db;
   const col=(name,key)=>db.collection(name).onSnapshot(snap=>{S[key]=snap.docs.map(d=>Object.assign({id:d.id},d.data()));schedule()},onErr);
-  col('ledger','ledger');col('recipes','recipes');col('moments','moments');col('health_gangjwi','hg');col('health_kkonyang','hk');col('health_comments','hc');
+  col('ledger','ledger');col('recipes','recipes');col('moments','moments');col('health_gangjwi','hg');col('health_kkonyang','hk');col('health_comments','hc');col('item_comments','ic');
   db.collection('budgets').onSnapshot(snap=>{const b={};snap.docs.forEach(d=>{b[d.id]=d.data().amount});S.budgets=b;schedule()},onErr);
   db.doc('settings/categories').onSnapshot(s=>{S.cats=s.exists?normCats(s.data()):normCats(null);schedule()},onErr);
   db.doc('settings/goals').onSnapshot(s=>{if(s.exists){const d=s.data();S.goals={gangjwi:Object.assign({},DEFAULT_GOALS.gangjwi,d.gangjwi||{}),kkonyang:Object.assign({},DEFAULT_GOALS.kkonyang,d.kkonyang||{})}}schedule()},onErr);
@@ -904,7 +906,7 @@ const CUISINES=['한식','중식','일식','양식'];
 function recipeCard(r){
   const c=CH[r.author];
   return `<a class="card recipe" href="#recipe-${r.id}"><div class="ph">${cover(r.photo,sp(c?c.happy:'k_happy'))}${photoSrc(r.photo)?zoomBtn('recipe',r.id):''}</div><h3>${esc(r.name)}</h3>
-    <div class="row" style="gap:8px"><span class="cu ${esc(r.cuisine)}">${esc(r.cuisine)}</span>${by(r.author)}</div><div class="datepill">${fmtDate(r.date)}</div></a>`;
+    <div class="row" style="gap:8px"><span class="cu ${esc(r.cuisine)}">${esc(r.cuisine)}</span>${by(r.author)}</div><div class="row spread"><span class="datepill">${fmtDate(r.date)}</span>${icOf('recipe',r.id).length?`<span class="cmtcount">${bubble} ${icOf('recipe',r.id).length}</span>`:''}</div></a>`;
 }
 function viewCook(){
   const list=[...S.recipes].sort(byDate).filter(r=>S.cuisine==='all'||r.cuisine===S.cuisine);
@@ -935,7 +937,10 @@ function viewRecipe(id){
       ${r.review?`<div class="review">“${esc(r.review)}”</div>`:''}
       <div><h3 style="font-size:21px;margin-bottom:6px">재료</h3>${ing.length?`<ul class="ingr">${ing.map(i=>`<li>${esc(i)}</li>`).join('')}</ul>`:'<span class="muted">적어둔 재료가 없어요</span>'}</div>
       <div><h3 style="font-size:21px;margin-bottom:6px">만드는 방법 · 메모</h3><div class="steps">${esc(r.steps||'적어둔 내용이 없어요')}</div></div>
-    </div></div></section>`;
+    </div></div></section>
+  <section class="card titled"><div class="tag">${bubble} 댓글</div>
+    ${icOf('recipe',r.id).slice(-3).map(x=>`<div class="cmt"><div class="row spread">${by(x.author)}<span class="datepill">${ftime(x.createdAt)}</span></div><div class="txt">${esc(x.text)}</div></div>`).join('')||'<div class="muted">아직 댓글이 없어요.</div>'}
+    <div style="margin-top:10px"><button class="btn sm" type="button" data-a="icomments" data-kind="recipe" data-id="${esc(r.id)}">${bubble} 댓글 달기 · 전체 보기${icOf('recipe',r.id).length?' ('+icOf('recipe',r.id).length+')':''}</button></div></section>`;
 }
 function photoField(existing){
   const src=photoSrc(existing);
@@ -1073,6 +1078,37 @@ function openComments(w,date,editId){
     };
   });
 }
+const icOf=(kind,id)=>S.ic.filter(c=>c.kind===kind&&c.target===id).sort((a,b)=>(a.createdAt||0)-(b.createdAt||0));
+function itemCmtBlock(kind,id){
+  const cs=icOf(kind,id);const last=cs[cs.length-1];
+  return `${last?`<div class="cmt-prev">${by(last.author)}<span class="t">${esc(last.text)}</span></div>`:''}<div><button class="btn sm" type="button" data-a="icomments" data-kind="${kind}" data-id="${esc(id)}">${bubble} 댓글${cs.length?' '+cs.length:''}</button></div>`;
+}
+async function delItemComments(kind,id){for(const cm of icOf(kind,id))await rm('item_comments',cm.id)}
+function openItemComments(kind,target,editId){
+  const src=kind==='recipe'?S.recipes:S.moments;const it=src.find(x=>x.id===target);if(!it)return;
+  const list=icOf(kind,target);const ed=editId?list.find(x=>x.id===editId):null;
+  const title=kind==='recipe'?it.name:(it.text?(it.text.length>16?it.text.slice(0,16)+'…':it.text):fmtDate(it.date));
+  openModal(`<h3>${sp(CH[S.me].happy)}${esc(title)}</h3>
+    <div class="cmts" id="cmts">${list.length?list.map(x=>`<div class="cmt"><div class="row spread">${by(x.author)}<span class="datepill">${ftime(x.createdAt)}${x.editedAt?' (수정됨)':''}</span></div><div class="txt">${esc(x.text)}</div>${x.author===S.me&&canAdd()?`<div class="row" style="justify-content:flex-end;gap:2px"><button class="iconbtn" type="button" data-k="edit" data-id="${esc(x.id)}">수정</button><button class="iconbtn" type="button" data-k="del" data-id="${esc(x.id)}">삭제</button></div>`:''}</div>`).join(''):'<div class="muted" style="padding:6px 0">아직 댓글이 없어요. 첫 댓글을 남겨봐요 ♡</div>'}</div>
+    ${canAdd()?`<form id="cf" class="field" style="margin-top:12px"><label for="c-text">${ed?'댓글 수정':'댓글 달기'}</label><textarea id="c-text" maxlength="300" style="min-height:72px" placeholder="한마디 남겨요 ♡">${ed?esc(ed.text):''}</textarea><div class="err" id="ferr"></div><div class="actions"><button class="btn ghost" type="button" data-k="close">닫기</button><button class="btn primary" type="submit" id="fsave">${ed?'수정 저장':'등록'}</button></div></form>`:`<div class="actions"><button class="btn ghost" type="button" data-k="close">닫기</button></div>`}`,m=>{
+    const box=m.querySelector('#cmts');if(box)box.scrollTop=box.scrollHeight;
+    m.querySelectorAll('[data-k]').forEach(b=>b.onclick=async()=>{
+      const k=b.dataset.k;
+      if(k==='close')closeModal();
+      else if(k==='edit')openItemComments(kind,target,b.dataset.id);
+      else if(k==='del'){try{await rm('item_comments',b.dataset.id);openItemComments(kind,target)}catch(e){toast('삭제하지 못했어요')}}
+    });
+    const f=m.querySelector('#cf');
+    if(f)f.onsubmit=async ev=>{
+      ev.preventDefault();const text=m.querySelector('#c-text').value.trim();
+      if(!text){m.querySelector('#ferr').textContent='내용을 입력해 주세요.';return}
+      m.querySelector('#fsave').disabled=true;
+      const data=ed?{kind,target,text,author:ed.author,createdAt:ed.createdAt,editedAt:Date.now()}:{kind,target,text,author:S.me,createdAt:Date.now()};
+      try{await put('item_comments',ed?ed.id:newId('item_comments'),data);openItemComments(kind,target)}
+      catch(e){m.querySelector('#fsave').disabled=false;m.querySelector('#ferr').textContent='저장하지 못했어요. 쓰기 권한을 확인해 주세요.'}
+    };
+  });
+}
 function openHealthForm(w,dateId){
   const isG=w==='gangjwi';const col=isG?'health_gangjwi':'health_kkonyang';const c=CH[w];
   const find=d=>recsOf(w).find(r=>r.id===d);
@@ -1130,7 +1166,7 @@ function viewMoments(){
   ${list.length?`<div class="moments">${list.map((m,i)=>{const c=CH[m.author];const mine=m.author===S.me&&canAdd();
     return `<article class="card polaroid" style="--r:${[-1.2,.8,-.5,1.1][i%4]}deg"><div class="tape"></div><div class="ph" ${photoSrc(m.photo)?`data-a="zoom" data-kind="moment" data-id="${esc(m.id)}"`:''}>${cover(m.photo,sp(c?c.sleep:'sunset'))}</div>
       ${m.text?`<p>${esc(m.text)}</p>`:''}<div class="row spread"><span class="datepill">${fmtDate(m.date)}</span>${by(m.author)}</div>
-      ${mine?`<div class="row" style="justify-content:flex-end;gap:2px"><button class="iconbtn" type="button" data-a="edit-moment" data-id="${m.id}">수정</button><button class="iconbtn" type="button" data-a="del-moment" data-id="${m.id}">삭제</button></div>`:''}</article>`}).join('')}</div>`
+      ${itemCmtBlock('moment',m.id)}${mine?`<div class="row" style="justify-content:flex-end;gap:2px"><button class="iconbtn" type="button" data-a="edit-moment" data-id="${m.id}">수정</button><button class="iconbtn" type="button" data-a="del-moment" data-id="${m.id}">삭제</button></div>`:''}</article>`}).join('')}</div>`
   :`<section class="card">${emptyBox('sunset','아직 올린 기록이 없어요','둘만의 하루를 사진 한 장과 한 줄로 남겨봐요')}</section>`}`;
 }
 function openMomentForm(id){
@@ -1180,16 +1216,17 @@ document.addEventListener('click',e=>{
     case 'cuisine':S.cuisine=v;render();break;
     case 'add-recipe':openRecipeForm();break;
     case 'edit-recipe':openRecipeForm(id);break;
-    case 'del-recipe':confirmBox('요리 삭제','이 요리 기록을 지울까요?','삭제',async()=>{await rm('recipes',id);location.hash='#cook'});break;
+    case 'del-recipe':confirmBox('요리 삭제','이 요리 기록을 지울까요?','삭제',async()=>{await rm('recipes',id);await delItemComments('recipe',id);location.hash='#cook'});break;
     case 'add-health':openHealthForm(w);break;
     case 'edit-health':openHealthForm(w,id);break;
     case 'del-health':confirmBox('기록 삭제',fmtDate(id)+' 기록을 지울까요?','삭제',async()=>{await rm(w==='gangjwi'?'health_gangjwi':'health_kkonyang',id);for(const cm of cmtsOf(w,id))await rm('health_comments',cm.id)});break;
     case 'goals':openGoalForm(w);break;
     case 'comments':openComments(w,id);break;
+    case 'icomments':openItemComments(b.dataset.kind,id);break;
     case 'more-health':S.hmore=true;render();break;
     case 'add-moment':openMomentForm();break;
     case 'edit-moment':openMomentForm(id);break;
-    case 'del-moment':confirmBox('기록 삭제','이 기록을 지울까요?','삭제',()=>rm('moments',id));break;
+    case 'del-moment':confirmBox('기록 삭제','이 기록을 지울까요?','삭제',async()=>{await rm('moments',id);await delItemComments('moment',id)});break;
   }
 });
 
